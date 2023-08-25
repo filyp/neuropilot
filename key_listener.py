@@ -4,10 +4,11 @@ import json
 import argparse
 
 parser = argparse.ArgumentParser(description='Run the key listener for activation engineering')
+parser.add_argument('--connector_host', type=str, default=socket.gethostname(), help='Host for the connector')
 parser.add_argument('--connector_port', type=int, default=5005, help='Port for the connector')
 args = parser.parse_args()
 
-host = socket.gethostname()
+host = args.connector_host
 port = args.connector_port
 
 client_socket = socket.socket()
@@ -57,7 +58,8 @@ class KeyHandler:
         self.pressed.add(k)
         
         # implement toggling behavior
-        if k == self._toggling_key and len(self.pressed) == 1:
+        # if k == self._toggling_key and len(self.pressed) == 1:
+        if k == self._toggling_key:   # relax this condition, bc some keypress artifacts make way into the set
             self._toggle_key_pressed_alone = True
         if k != self._toggling_key:
             self._toggle_key_pressed_alone = False
@@ -117,4 +119,9 @@ except KeyboardInterrupt:
     key_handler.send_state(final_state)
     client_socket.close()
     print("\nbye")
-    
+except BrokenPipeError:
+    print("Server disconnected")
+    key_handler.listener.stop()
+    key_handler.listener.join()
+    client_socket.close()
+    print("\nbye")    

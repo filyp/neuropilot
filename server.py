@@ -76,7 +76,7 @@ class ClientConnector:
 class UI:
     def __init__(self):
         self.text_area = pn.widgets.TextAreaInput(value="", sizing_mode="stretch_both")
-        self.steering_strength = pn.widgets.FloatSlider(name="Steering Strength", start=0.0, end=30, step=0.01, value=3)
+        self.steering_strength = pn.widgets.FloatSlider(name="Steering Strength (log10)", start=-3, end=3, step=0.01, value=0)
         self.layer_num = pn.widgets.IntSlider(name="Layer Number", start=0, end=num_layers - 1, step=1, value=6)
         self.info_box = pn.widgets.StaticText(name="Info", value="Not started")
 
@@ -176,7 +176,7 @@ def add_vector(resid_pre, hook):
     modifying_activations = []
     for key in client_connector.pressed:
         if key in directions:
-            component = directions[key] * ui.steering_strength.value
+            component = directions[key] * (10 ** ui.steering_strength.value)
             to_add += component
             modifying_activations.append((component[:2], key))
     
@@ -215,7 +215,7 @@ def generate_tokens(text):
     
 def main_loop_func():
     while client_connector.receiver_thread.is_alive():
-        ui.info_box.value = str(client_connector.pressed)
+        ui.info_box.value = str(client_connector.pressed) if client_connector.generating_lock else "-"
         if client_connector.should_generate:
             generate_tokens(ui.text_area.value_input)
             # ui.text_area.value_input = generate_tokens(ui.text_area.value_input)
