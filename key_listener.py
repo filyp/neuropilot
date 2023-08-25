@@ -1,9 +1,14 @@
 # %%
 import socket
 import json
+import argparse
+
+parser = argparse.ArgumentParser(description='Run the key listener for activation engineering')
+parser.add_argument('--connector_port', type=int, default=5005, help='Port for the connector')
+args = parser.parse_args()
 
 host = socket.gethostname()
-port = 5005
+port = args.connector_port
 
 client_socket = socket.socket()
 client_socket.connect((host, port))

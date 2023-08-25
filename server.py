@@ -3,6 +3,7 @@
 import time
 import socket
 import json
+import argparse
 from threading import Thread
 from typing import Dict, Union, List, Tuple
 
@@ -15,6 +16,13 @@ import numpy as np
 from transformer_lens import HookedTransformer
 
 
+parser = argparse.ArgumentParser(description='Run the server for activation engineering')
+parser.add_argument('--ui_port', type=int, default=443, help='Port for the UI')
+parser.add_argument('--connector_port', type=int, default=5005, help='Port for the connector')
+parser.add_argument('--model_name', type=str, default="gpt2-small", help='Name of the model to use')
+args = parser.parse_args()
+
+
 class ClientConnector:
     def __init__(self):
         self.pressed = set()
@@ -22,22 +30,25 @@ class ClientConnector:
         self.should_generate = False
 
         host = socket.gethostname()
-        port = 5005
+        port = args.connector_port
 
         self._server_socket = socket.socket()
         self._server_socket.bind((host, port))
+        self._server_socket.settimeout(3)
         
         self.stop = False
         self.receiver_thread = Thread(target=self.receive_data)
-        self.receiver_thread.start()
+        # self.receiver_thread.start()
     
     def receive_data(self):
         self._server_socket.listen(1)
         
         while not self.stop:
-            # TODO .accept() should timeout, so that we can check if we should stop
-            # now we can only stop during a connection
-            conn, address = self._server_socket.accept()
+            try:
+                conn, address = self._server_socket.accept()
+            except socket.timeout:
+                # print("Waiting for connection...")
+                continue
             print("Connection from: " + str(address))
 
             while not self.stop:
@@ -57,8 +68,9 @@ class ClientConnector:
                 # so it cannot be used now for generating
                 # probably it's because of weird escaping
 
-            print("Connection closed")
             conn.close()
+            print("Connection closed")
+        print("Connector thread stopped")
 
 
 class UI:
@@ -140,14 +152,12 @@ class UI:
         self.plot.param.trigger('object')
 
 
-print("Start")
-client_connector = ClientConnector()
-
 # load the model
 torch.set_grad_enabled(False)  # save memory
-model = HookedTransformer.from_pretrained("gpt2-medium", device="cpu")
+model = HookedTransformer.from_pretrained(args.model_name, device="cpu")
 num_layers = len(model._modules["blocks"])
 
+client_connector = ClientConnector()
 ui = UI()
 
 # consctruct a random set of directions
@@ -214,15 +224,19 @@ def main_loop_func():
     ui.info_box.value = "Off"
 
 
+client_connector.receiver_thread.start()
+print("Connector started")
+
 # it needs to be a thread because otherwise panel can't update
 main_loop = Thread(target=main_loop_func)
 main_loop.start()
 
-ui.full.show(port=5000)
+print("Serving UI")
+ui.full.show(port=args.ui_port)
 # ctrl+c will stop this and go past this line
 
 print("\nStopping")
 client_connector.stop = True
 client_connector.receiver_thread.join()
 main_loop.join()
-print("End")
+print("Clean end")
