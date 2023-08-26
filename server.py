@@ -183,7 +183,7 @@ def add_vector(resid_pre, hook):
     
     ui.update_plot(resid_pre[:, -1, :2].flatten().cpu(), modifying_activations)
 
-    resid_pre[:, -1, :] += torch.from_numpy(to_add).cuda()
+    resid_pre[:, -1, :] += torch.from_numpy(to_add).to(device)
     # TODO double check that this broadcasting works as intended
     
 
