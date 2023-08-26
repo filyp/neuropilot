@@ -16,10 +16,10 @@ import numpy as np
 from transformer_lens import HookedTransformer
 
 
-parser = argparse.ArgumentParser(description='Run the server for activation engineering')
-parser.add_argument('--ui_port', type=int, default=5000, help='Port for the UI')
-parser.add_argument('--connector_port', type=int, default=5005, help='Port for the connector')
-parser.add_argument('--model', type=str, default="gpt2-small", help='Name of the model to use')
+parser = argparse.ArgumentParser(description="Run the server for activation engineering")
+parser.add_argument("--ui_port", type=int, default=5000, help="Port for the UI")
+parser.add_argument("--connector_port", type=int, default=5005, help="Port for the connector")
+parser.add_argument("--model", type=str, default="gpt2-small", help="Name of the model to use")
 args = parser.parse_args()
 
 
@@ -35,14 +35,14 @@ class ClientConnector:
         self._server_socket = socket.socket()
         self._server_socket.bind((host, port))
         self._server_socket.settimeout(3)
-        
+
         self.stop = False
         self.receiver_thread = Thread(target=self.receive_data)
         # self.receiver_thread.start()
-    
+
     def receive_data(self):
         self._server_socket.listen(1)
-        
+
         while not self.stop:
             try:
                 conn, address = self._server_socket.accept()
@@ -55,7 +55,7 @@ class ClientConnector:
                 data = conn.recv(1024).decode()
                 if not data:
                     break
-                
+
                 # the data can be two dicts concatenated,
                 # so we need to split them and only process the last one
                 data = data.split("\n")[-1]
@@ -74,9 +74,11 @@ class ClientConnector:
 
 
 class UI:
-    def __init__(self):
+    def __init__(self, num_layers: int):
         self.text_area = pn.widgets.TextAreaInput(value="", sizing_mode="stretch_both")
-        self.steering_strength = pn.widgets.FloatSlider(name="Steering Strength (log10)", start=-3, end=3, step=0.01, value=0)
+        self.steering_strength = pn.widgets.FloatSlider(
+            name="Steering Strength (log10)", start=-3, end=3, step=0.01, value=0
+        )
         self.layer_num = pn.widgets.IntSlider(name="Layer Number", start=0, end=num_layers - 1, step=1, value=6)
         self.info_box = pn.widgets.StaticText(name="Info", value="Not started")
 
@@ -85,25 +87,29 @@ class UI:
         plt.ioff()
         fig, ax = plt.subplots(figsize=(20, 20))
 
-        ax.set_aspect("equal") # note: not sure if clear resets this or not
-        ax.set_facecolor((0., 0., 0.))  # black background
+        ax.set_aspect("equal")  # note: not sure if clear resets this or not
+        ax.set_facecolor((0.0, 0.0, 0.0))  # black background
         self._ax = ax
         self._max_plotting_scale = 0.000001
         self.update_plot(None, None)  # set up plot
         self.plot = pn.pane.Matplotlib(fig, tight=True, sizing_mode="stretch_both", format="svg")
         # svg format is necessary; without it there are some weird lags when updating the text!
-        
+
         self.full = pn.Row(
             self.text_area,
             pn.Column(
                 pn.Row(self.steering_strength, self.layer_num, sizing_mode="stretch_width"),
                 self.info_box,
                 self.plot,
-                sizing_mode="stretch_both"
+                sizing_mode="stretch_both",
             ),
         )
-    
-    def update_plot(self, existing_activation: List[float], modifying_activations: List[Tuple[List[float], str]]):
+
+    def update_plot(
+        self,
+        existing_activation: List[float],
+        modifying_activations: List[Tuple[List[float], str]],
+    ):
         ax = self._ax
         # clear previous plot
         ax.clear()
@@ -118,7 +124,7 @@ class UI:
         ax.plot([0, 0], [-1, 1], color="grey", linewidth=1)
         if existing_activation is None:
             return
-        
+
         # update scale
         vector_sum = np.array(existing_activation[:2])
         self._max_plotting_scale = max(np.abs(vector_sum[0]), np.abs(vector_sum[1]), self._max_plotting_scale)
@@ -134,91 +140,99 @@ class UI:
         # draw modifying activations
         for activation, key in modifying_activations:
             # convert key (string) to color by hashing
-            hue = int(hashlib.shake_128(key.encode('utf-8')).hexdigest(1), 16)
+            hue = int(hashlib.shake_128(key.encode("utf-8")).hexdigest(1), 16)
             color = matplotlib.colors.hsv_to_rgb((hue / 255, 1, 1))
-            
+
             # ax.arrow(vector_sum[0] / s, vector_sum[1] / s, activation[0] / s, activation[1] / s, color="red", linewidth=2, head_width=0.02, head_length=0.02)
             new_vector_sum = vector_sum + np.array(activation[:2])
             ax.plot(
                 [vector_sum[0] / s, new_vector_sum[0] / s],
                 [vector_sum[1] / s, new_vector_sum[1] / s],
                 color=color,
-                linewidth=2
+                linewidth=2,
             )
             vector_sum = new_vector_sum
 
-
         # update plot
-        self.plot.param.trigger('object')
+        self.plot.param.trigger("object")
 
 
-# load the model
-device = "cuda" if torch.cuda.is_available() else "cpu"
-torch.set_grad_enabled(False)  # save memory
-model = HookedTransformer.from_pretrained(args.model, device=device)
-num_layers = len(model._modules["blocks"])
+class Generator:
+    def __init__(self, new_token_callback):
+        self.new_token_callback = new_token_callback
 
-client_connector = ClientConnector()
-ui = UI()
+        # load the model
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        torch.set_grad_enabled(False)  # save memory
 
-# consctruct a random set of directions
-np.random.seed(0)
-directions = dict()
-for letter in "abcdefghijklmnopqrstuvwxyz,.":
-    directions[letter] = np.random.normal(0, 1, model.cfg.d_model)
-# TODO handling these directions could be done by a class, together with looping over pressed keys, and later extracting directions from text
-    
+        if "llama" in args.model.lower():
+            raise NotImplementedError("Llama models are not supported yet")
+        else:
+            self.model = HookedTransformer.from_pretrained(args.model, device=self.device)
 
-def add_vector(resid_pre, hook):
-    if hook.layer() != ui.layer_num.value:
-        return
+        self.num_layers = len(self.model._modules["blocks"])
 
-    to_add = np.zeros(model.cfg.d_model)
-    modifying_activations = []
-    for key in client_connector.pressed:
-        if key in directions:
-            component = directions[key] * (10 ** ui.steering_strength.value)
-            to_add += component
-            modifying_activations.append((component[:2], key))
-    
-    ui.update_plot(resid_pre[:, -1, :2].flatten().cpu(), modifying_activations)
+        # consctruct a random set of directions
+        np.random.seed(0)
+        self.directions = dict()
+        for letter in "abcdefghijklmnopqrstuvwxyz,.":
+            self.directions[letter] = np.random.normal(0, 1, self.model.cfg.d_model)
+        # TODO handling these directions could be done by a class, together with looping over pressed keys, and later extracting directions from text
 
-    resid_pre[:, -1, :] += torch.from_numpy(to_add).to(device)
-    # TODO double check that this broadcasting works as intended
-    
+    def add_vector(self, resid_pre, hook):
+        # this function will be run as a hook
+
+        if hook.layer() != ui.layer_num.value:
+            return
+
+        to_add = np.zeros(self.model.cfg.d_model)
+        modifying_activations = []
+        for key in client_connector.pressed:
+            if key in self.directions:
+                component = self.directions[key] * (10**ui.steering_strength.value)
+                to_add += component
+                modifying_activations.append((component[:2], key))
+
+        ui.update_plot(resid_pre[:, -1, :2].flatten().cpu(), modifying_activations)
+
+        resid_pre[:, -1, :] += torch.from_numpy(to_add).to(self.device)
+        # TODO double check that this broadcasting works as intended
+
+    def generate_tokens(self, text):
+        _hook_filter = lambda name: name.endswith("resid_pre")
+        with self.model.hooks(fwd_hooks=[(_hook_filter, self.add_vector)]):
+            new_text = self.model.generate(
+                text,
+                max_new_tokens=999999,
+                temperature=1,
+                verbose=False,
+                stop_criterion=self.new_token_callback,
+            )
+        return new_text
+
 
 def new_token_callback(tokens, hooked_transformer):
-    tokens_to_display = tokens[0][1:]   # remove the BOS token
+    tokens_to_display = tokens[0][1:]  # remove the BOS token TODO: but this is not always the case? we should check
     text = hooked_transformer.tokenizer.decode(tokens_to_display)
     ui.text_area.value_input = text
     # btw, update all the rest
     ui.info_box.value = str(client_connector.pressed)
     ui.text_area.disabled = client_connector.generating_lock
 
-
-def should_we_stop_generating(tokens, hooked_transformer):
+    # return True if we should stop generating
     return (not client_connector.should_generate) or (client_connector.stop)
 
 
-def generate_tokens(text):
-    _hook_filter = lambda name: name.endswith("resid_pre")
-    with model.hooks(fwd_hooks=[(_hook_filter, add_vector)]):
-        new_text = model.generate(
-            text,
-            max_new_tokens=999999,
-            temperature=1,
-            verbose=False,
-            stop_criterion=should_we_stop_generating,
-            new_token_callback=new_token_callback,
-        )
-    return new_text
+generator = Generator(new_token_callback)
+client_connector = ClientConnector()
+ui = UI(num_layers=generator.num_layers)
 
-    
+
 def main_loop_func():
     while client_connector.receiver_thread.is_alive():
         ui.info_box.value = str(client_connector.pressed) if client_connector.generating_lock else "-"
         if client_connector.should_generate:
-            generate_tokens(ui.text_area.value_input)
+            generator.generate_tokens(ui.text_area.value_input)
             # ui.text_area.value_input = generate_tokens(ui.text_area.value_input)
         else:
             time.sleep(0.010)

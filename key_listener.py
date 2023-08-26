@@ -5,9 +5,9 @@ import argparse
 import time
 import sys
 
-parser = argparse.ArgumentParser(description='Run the key listener for activation engineering')
-parser.add_argument('--host', type=str, default=socket.gethostname(), help='Host for the connector')
-parser.add_argument('--port', type=int, default=5005, help='Port for the connector')
+parser = argparse.ArgumentParser(description="Run the key listener for activation engineering")
+parser.add_argument("--host", type=str, default=socket.gethostname(), help="Host for the connector")
+parser.add_argument("--port", type=int, default=5005, help="Port for the connector")
 args = parser.parse_args()
 
 host = args.host
@@ -23,7 +23,7 @@ while True:
         break
     except ConnectionRefusedError:
         print(".", end="")
-        # flush 
+        # flush
         sys.stdout.flush()
         time.sleep(1)
         continue
@@ -31,6 +31,7 @@ print("\nConnected")
 
 # %%
 from pynput import keyboard
+
 # "keyboard" lib would let us access what is pressed directly, but it requires root
 
 
@@ -45,7 +46,7 @@ class KeyHandler:
         self.generating_lock = False
         self.listener = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)
         self.listener.start()
-    
+
     def get_state(self):
         return dict(
             pressed=sorted(self.pressed),
@@ -53,7 +54,7 @@ class KeyHandler:
             generating_lock=self.generating_lock,
             should_generate=self.should_generate(),
         )
-    
+
     def send_state(self, state):
         try:
             client_socket.sendall(("\n" + json.dumps(state)).encode())
@@ -66,33 +67,33 @@ class KeyHandler:
 
         k = str(key).replace("'", "").replace("Key.", "").replace("<65511>", "alt").lower()
         if k == "<0>":
-            return    # this is some weird macro artifact
+            return  # this is some weird macro artifact
         # if k == "esc":
         #     # self.esc_registered = True
         #     # close connection
         #     client_socket.close()
         #     # stop the listener
         #     return False
-        # print(f"key {k} pressed") 
+        # print(f"key {k} pressed")
         self.pressed.add(k)
-        
+
         # implement toggling behavior
         # if k == self._toggling_key and len(self.pressed) == 1:
-        if k == self._toggling_key:   # relax this condition, bc some keypress artifacts make way into the set
+        if k == self._toggling_key:  # relax this condition, bc some keypress artifacts make way into the set
             self._toggle_key_pressed_alone = True
         if k != self._toggling_key:
             self._toggle_key_pressed_alone = False
-        
+
         new_state = self.get_state()
         if new_state != last_state:
             # state changed, so send it to the server
             self.send_state(new_state)
 
-    def _on_release(self, key): 
+    def _on_release(self, key):
         last_state = self.get_state()
 
         k = str(key).replace("'", "").replace("Key.", "").replace("<65511>", "alt").lower()
-        # print(f"key {k} released") 
+        # print(f"key {k} released")
         if k in self.pressed:
             self.pressed.remove(k)
 
@@ -103,7 +104,7 @@ class KeyHandler:
             # it's unclean to reference ui here, but it's the easiest way
             # I coulc also use a callback
             # ui.text_area.disabled = self._generating_lock
-        
+
         new_state = self.get_state()
         if new_state != last_state:
             # state changed, so send it to the server
@@ -122,7 +123,7 @@ class KeyHandler:
 
         # no reason to continue generating
         return False
-                
+
 
 try:
     key_handler = KeyHandler()
