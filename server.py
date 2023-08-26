@@ -17,7 +17,7 @@ from transformer_lens import HookedTransformer
 
 
 parser = argparse.ArgumentParser(description='Run the server for activation engineering')
-parser.add_argument('--ui_port', type=int, default=443, help='Port for the UI')
+parser.add_argument('--ui_port', type=int, default=5000, help='Port for the UI')
 parser.add_argument('--connector_port', type=int, default=5005, help='Port for the connector')
 parser.add_argument('--model_name', type=str, default="gpt2-small", help='Name of the model to use')
 args = parser.parse_args()

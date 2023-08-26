@@ -5,4 +5,4 @@ source activate pytorch
 pip install -r requirements.txt
 yum -y install htop
 # this rc.local thing is not working
-echo "export BOKEH_ALLOW_WS_ORIGIN='*.eu-north-1.compute.amazonaws.com:443'" >> /etc/rc.local
+echo "export BOKEH_ALLOW_WS_ORIGIN='*.eu-north-1.compute.amazonaws.com:5000'" >> /etc/rc.local

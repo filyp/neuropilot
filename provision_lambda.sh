@@ -6,5 +6,4 @@ python -m venv venv
 pip install -r requirements.txt
 
 # running
-sudo su   # required to bind to port 443; hmmm what about using some different port later?
-export BOKEH_ALLOW_WS_ORIGIN='*:443'
+export BOKEH_ALLOW_WS_ORIGIN='*:5000'
