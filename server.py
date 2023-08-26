@@ -19,7 +19,7 @@ from transformer_lens import HookedTransformer
 parser = argparse.ArgumentParser(description='Run the server for activation engineering')
 parser.add_argument('--ui_port', type=int, default=5000, help='Port for the UI')
 parser.add_argument('--connector_port', type=int, default=5005, help='Port for the connector')
-parser.add_argument('--model_name', type=str, default="gpt2-small", help='Name of the model to use')
+parser.add_argument('--model', type=str, default="gpt2-small", help='Name of the model to use')
 args = parser.parse_args()
 
 
@@ -155,7 +155,7 @@ class UI:
 # load the model
 device = "cuda" if torch.cuda.is_available() else "cpu"
 torch.set_grad_enabled(False)  # save memory
-model = HookedTransformer.from_pretrained(args.model_name, device=device)
+model = HookedTransformer.from_pretrained(args.model, device=device)
 num_layers = len(model._modules["blocks"])
 
 client_connector = ClientConnector()

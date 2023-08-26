@@ -6,12 +6,12 @@ import time
 import sys
 
 parser = argparse.ArgumentParser(description='Run the key listener for activation engineering')
-parser.add_argument('--connector_host', type=str, default=socket.gethostname(), help='Host for the connector')
-parser.add_argument('--connector_port', type=int, default=5005, help='Port for the connector')
+parser.add_argument('--host', type=str, default=socket.gethostname(), help='Host for the connector')
+parser.add_argument('--port', type=int, default=5005, help='Port for the connector')
 args = parser.parse_args()
 
-host = args.connector_host
-port = args.connector_port
+host = args.host
+port = args.port
 
 client_socket = socket.socket()
 # client_socket.connect((host, port))
