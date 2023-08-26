@@ -55,7 +55,11 @@ class KeyHandler:
         )
     
     def send_state(self, state):
-        client_socket.sendall(("\n" + json.dumps(state)).encode())
+        try:
+            client_socket.sendall(("\n" + json.dumps(state)).encode())
+        except BrokenPipeError:
+            print("Server disconnected")
+            self.listener.stop()
 
     def _on_press(self, key):
         last_state = self.get_state()
@@ -132,11 +136,6 @@ except KeyboardInterrupt:
         should_generate=False,
     )
     key_handler.send_state(final_state)
-    client_socket.close()
-    print("\nbye")
-except BrokenPipeError:
-    print("Server disconnected")
-    key_handler.listener.stop()
-    key_handler.listener.join()
-    client_socket.close()
-    print("\nbye")    
+
+client_socket.close()
+print("\nbye")

@@ -153,8 +153,9 @@ class UI:
 
 
 # load the model
+device = "cuda" if torch.cuda.is_available() else "cpu"
 torch.set_grad_enabled(False)  # save memory
-model = HookedTransformer.from_pretrained(args.model_name, device="cpu")
+model = HookedTransformer.from_pretrained(args.model_name, device=device)
 num_layers = len(model._modules["blocks"])
 
 client_connector = ClientConnector()
@@ -180,9 +181,9 @@ def add_vector(resid_pre, hook):
             to_add += component
             modifying_activations.append((component[:2], key))
     
-    ui.update_plot(resid_pre[:, -1, :2].flatten(), modifying_activations)
+    ui.update_plot(resid_pre[:, -1, :2].flatten().cpu(), modifying_activations)
 
-    resid_pre[:, -1, :] += to_add
+    resid_pre[:, -1, :] += torch.from_numpy(to_add).cuda()
     # TODO double check that this broadcasting works as intended
     
 
