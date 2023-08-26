@@ -156,7 +156,7 @@ class UI:
 torch.set_grad_enabled(False)  # save memory
 # model = HookedTransformer.from_pretrained(args.model_name, device="cpu")
 tokenizer = transformers.AutoTokenizer.from_pretrained(args.model_name)
-model = transformers.AutoModelForCausalLM.from_pretrained(args.model_name)
+model = transformers.AutoModelForCausalLM.from_pretrained(args.model_name, device_map="auto")
 num_layers = len(model._modules["blocks"])
 
 client_connector = ClientConnector()
@@ -204,13 +204,11 @@ for letter in "abcdefghijklmnopqrstuvwxyz,.":
 def generate_tokens(text):
     _hook_filter = lambda name: name.endswith("resid_pre")
     # with model.hooks(fwd_hooks=[(_hook_filter, add_vector)]):
-    tokens = tokenizer(text, return_tensors="pt").to("cuda")
     new_text = model.generate(
-        **tokens,
+        text,
         max_new_tokens=20,
         temperature=1,
     )
-    new_text = tokenizer.decode(new_text[0], skip_special_tokens=True)
     return new_text
 
     

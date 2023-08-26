@@ -2,6 +2,8 @@
 import socket
 import json
 import argparse
+import time
+import sys
 
 parser = argparse.ArgumentParser(description='Run the key listener for activation engineering')
 parser.add_argument('--connector_host', type=str, default=socket.gethostname(), help='Host for the connector')
@@ -12,7 +14,20 @@ host = args.connector_host
 port = args.connector_port
 
 client_socket = socket.socket()
-client_socket.connect((host, port))
+# client_socket.connect((host, port))
+
+print("Waiting for connection", end="")
+while True:
+    try:
+        client_socket.connect((host, port))
+        break
+    except ConnectionRefusedError:
+        print(".", end="")
+        # flush 
+        sys.stdout.flush()
+        time.sleep(1)
+        continue
+print("\nConnected")
 
 # %%
 from pynput import keyboard
