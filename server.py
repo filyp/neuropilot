@@ -5,7 +5,7 @@ import socket
 import json
 import argparse
 from threading import Thread
-from typing import Dict, Union, List, Tuple
+from typing import Any, Dict, Union, List, Tuple
 
 import hashlib
 import matplotlib
@@ -74,13 +74,20 @@ class ClientConnector:
 
 
 class UI:
-    def __init__(self, num_layers: int):
+    def __init__(self, num_layers: int, directions_data: Dict[str, Dict[str, Any]]):
+        self._directions_data = directions_data
         self.text_area = pn.widgets.TextAreaInput(value="", sizing_mode="stretch_both")
         self.steering_strength = pn.widgets.FloatSlider(
             name="Steering Strength (log10)", start=-3, end=3, step=0.01, value=0
         )
         self.layer_num = pn.widgets.IntSlider(name="Layer Number", start=0, end=num_layers - 1, step=1, value=6)
         self.info_box = pn.widgets.StaticText(name="Info", value="Not started")
+        self.letter_select = pn.widgets.Select(name="Letter", options=list(directions_data.keys()))
+        self.letter_select.param.watch(self._update_text_to_extract_area, "value")
+        self.extract_direction_button = pn.widgets.Button(name="Extract", button_type="primary", align="end")
+        self.extract_direction_button.on_click(self._extract_direction)
+        self.text_to_extract_area = pn.widgets.TextAreaInput(value="", sizing_mode="stretch_both")
+        self._update_text_to_extract_area(None)
 
         # some square for 2d plotting, must have square aspect ratio
         # turn interactive plotting off, so that it's not displayed in notebook
@@ -92,16 +99,36 @@ class UI:
         self._ax = ax
         self._max_plotting_scale = 0.000001
         self.update_plot(None, None)  # set up plot
-        self.plot = pn.pane.Matplotlib(fig, tight=True, sizing_mode="stretch_both", format="svg")
+        # self.plot = pn.pane.Matplotlib(fig, tight=True, format="svg", height=400, width=400)
+        self.plot = pn.pane.Matplotlib(fig, tight=True, format="svg", sizing_mode="stretch_height")
         # svg format is necessary; without it there are some weird lags when updating the text!
 
         self.full = pn.Row(
             self.text_area,
             pn.Column(
-                pn.Row(self.steering_strength, self.layer_num, sizing_mode="stretch_width"),
-                self.info_box,
-                self.plot,
-                sizing_mode="stretch_both",
+                pn.Row(self.letter_select, self.extract_direction_button, sizing_mode="stretch_width"),
+                self.text_to_extract_area,
+                pn.Row(
+                    pn.Column(
+                        self.info_box,
+                        self.steering_strength,
+                        self.layer_num,
+                    ),
+                    # add a spacer to push the plot to the right maximally
+                    pn.Spacer(sizing_mode="stretch_width"),
+                    self.plot,
+                    sizing_mode="stretch_width",
+                ),
+                # pn.FlexBox(
+                #     pn.Column(
+                #         self.info_box,
+                #         self.steering_strength,
+                #         self.layer_num,
+                #     ),
+                #     self.plot,
+                #     flex_direction="row",
+                #     justify_content="space-between",
+                # ),
             ),
         )
 
@@ -156,6 +183,16 @@ class UI:
         # update plot
         self.plot.param.trigger("object")
 
+    def _update_text_to_extract_area(self, event):
+        letter = self.letter_select.value
+        self.text_to_extract_area.value = self._directions_data[letter]["source_text"]
+
+    def _extract_direction(self, event):
+        generator.extract_direction(
+            self.text_to_extract_area.value,
+            self.letter_select.value,
+        )
+
 
 class Generator:
     def __init__(self, new_token_callback):
@@ -174,22 +211,21 @@ class Generator:
 
         # consctruct a random set of directions
         np.random.seed(0)
-        self.directions = dict()
+        self.directions_data = dict()
         for letter in "abcdefghijklmnopqrstuvwxyz,.":
-            self.directions[letter] = np.random.normal(0, 1, self.model.cfg.d_model)
+            self.directions_data[letter] = dict(
+                direction=np.random.normal(0, 1, self.model.cfg.d_model),
+                source_text="<random>",
+            )
         # TODO handling these directions could be done by a class, together with looping over pressed keys, and later extracting directions from text
 
     def add_vector(self, resid_pre, hook):
         # this function will be run as a hook
-
-        if hook.layer() != ui.layer_num.value:
-            return
-
         to_add = np.zeros(self.model.cfg.d_model)
         modifying_activations = []
         for key in client_connector.pressed:
-            if key in self.directions:
-                component = self.directions[key] * (10**ui.steering_strength.value)
+            if key in self.directions_data:
+                component = self.directions_data[key]["direction"] * (10**ui.steering_strength.value)
                 to_add += component
                 modifying_activations.append((component[:2], key))
 
@@ -199,7 +235,7 @@ class Generator:
         # TODO double check that this broadcasting works as intended
 
     def generate_tokens(self, text):
-        _hook_filter = lambda name: name.endswith("resid_pre")
+        _hook_filter = lambda name: name == f"blocks.{ui.layer_num.value}.hook_resid_pre"
         with self.model.hooks(fwd_hooks=[(_hook_filter, self.add_vector)]):
             new_text = self.model.generate(
                 text,
@@ -209,6 +245,22 @@ class Generator:
                 stop_criterion=self.new_token_callback,
             )
         return new_text
+
+    def extract_direction(self, text, letter):
+        ui.info_box.value = "Extracting..."
+        name = f"blocks.{ui.layer_num.value}.hook_resid_pre"
+        cache, caching_hooks, _ = self.model.get_caching_hooks(lambda n: n == name)
+        with self.model.hooks(fwd_hooks=caching_hooks):
+            _ = self.model(text)
+        activations = cache[name][0]
+
+        self.directions_data[letter] = dict(
+            direction=activations.mean(dim=0).cpu().numpy(),
+            source_text=text,
+            hook_point=name,
+            activations=activations.cpu().numpy(),
+        )
+        ui.info_box.value = "Extracted"
 
 
 def new_token_callback(tokens, hooked_transformer):
@@ -225,7 +277,7 @@ def new_token_callback(tokens, hooked_transformer):
 
 generator = Generator(new_token_callback)
 client_connector = ClientConnector()
-ui = UI(num_layers=generator.num_layers)
+ui = UI(num_layers=generator.num_layers, directions_data=generator.directions_data)
 
 
 def main_loop_func():
@@ -248,6 +300,7 @@ main_loop.start()
 
 print("Serving UI")
 ui.full.show(port=args.ui_port)
+# websocket_origin=["*.ngrok.io", "localhost:5000"],
 # ctrl+c will stop this and go past this line
 
 print("\nStopping")
