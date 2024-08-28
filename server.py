@@ -202,10 +202,7 @@ class Generator:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         torch.set_grad_enabled(False)  # save memory
 
-        if "llama" in args.model.lower():
-            raise NotImplementedError("Llama models are not supported yet")
-        else:
-            self.model = HookedTransformer.from_pretrained(args.model, device=self.device)
+        self.model = HookedTransformer.from_pretrained(args.model, device=self.device)
 
         self.num_layers = len(self.model._modules["blocks"])
 
