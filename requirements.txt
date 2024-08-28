@@ -2,4 +2,5 @@ transformer-lens @ git+https://github.com/filyp/TransformerLens@9ac5607e613056b8
 panel==1.2.1
 matplotlib==3.9.2
 pynput==1.7.6
+evdev==1.7.1
 ipykernel==6.24.0
